@@ -73,3 +73,45 @@ MQ为了保证消息必达，消息上下半场均可能发送重复消息，如
          的幂等。
 </pre>
 
+<pre>
+消息去重
+
+      去重原则：
+              1）幂等性  2）业务去重
+      幂等性：
+            无论这个业务请求被执行多少次，数据库的结构都是唯一的，不可改变的。
+      去重策略：
+            1：建立一个消息表，拿到这个消息做数据库的insert操作，给这个消息做一个唯一的主键
+               或者唯一约束，那么就算出现重复消费的情况，就会导致主键冲突。
+      高并发下去重：
+            采用Redis去重，key天然支持原子性并要求不可重复，但是由于不再一个事务，要求有适当
+            的补偿策略。
+
+            2：利用Redis事务，主键（必须把全量的操作数据都存放在redis里，然后定时去和数据库）
+               数据同步，即消费处理后，该处理本来应该保存在数据库的，先保存在Redis。
+            3：利用Redis和关系型数据库一起做去重机制。
+            5：拿到这个消息做Redis的set操作，Redis就是天然幂等性
+            6：准备一个第三方介质来做消费处理，以Redis为例，给消息分配一个全局ID，只要消费国该消息，
+               将<id, message>以K-V形式写入Redis，那消费者开始消费前，先去Redis中查询有没有消费记录即可。
+</pre>
+
+![](https://i.imgur.com/zHVZGyH.png)
+
+![](https://i.imgur.com/yHVYwu1.png)
+
+<pre>
+Kafka幂等性
+
+      Kafka Producer 在实现时有以下两个重要机制：
+            PID（Producer ID），用来标识每个 producer client；
+            sequence numbers，client 发送的每条消息都会带相应的 sequence number，Server 端就是
+            根据这个值来判断数据是否重复。
+
+      PID：
+          每个 Producer 在初始化时都会被分配一个唯一的 PID，这个 PID 对应用是透明的，完全没有暴露给
+          用户。对于一个给定的 PID，sequence number 将会从0开始自增，每个 Topic-Partition 都会有一
+          个独立的 sequence number。Producer 在发送数据时，将会给每条 msg 标识一个 sequence 
+          number，Server 也就是通过这个来验证数据是否重复。这里的 PID 是全局唯一的，Producer 故障后
+          重新启动后会被分配一个新的 PID，这也是幂等性无法做到跨会话的一个原因。
+</pre>
+
